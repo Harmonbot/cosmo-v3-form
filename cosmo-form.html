@@ -2162,7 +2162,7 @@ function handleSubmit() {
     errors.push({ el: asinInput, msg: 'ASIN应为10位字母数字' });
   }
   
-  const comp1Asin = document.querySelector('.competitor-card:first-of-type input.mono');
+  const comp1Asin = document.querySelector('#sec-competitors .competitor-card input.mono');
   if (!comp1Asin?.value?.trim()) {
     errors.push({ el: comp1Asin, msg: '至少填写竞品1的ASIN' });
   }
