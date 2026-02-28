@@ -1143,65 +1143,65 @@ input[type="file"] { display: none; }
     <!-- Nav -->
     <nav class="sidebar-nav">
       <div class="nav-section-label">基础输入</div>
-      <div class="nav-item active" onclick="scrollTo('sec-mode')">
+      <div class="nav-item active" onclick="navScrollTo('sec-mode')">
         <span class="nav-icon">⚡</span>
         <span class="nav-text">诊断模式</span>
         <span class="nav-status complete"></span>
       </div>
-      <div class="nav-item" onclick="scrollTo('sec-basic')">
+      <div class="nav-item" onclick="navScrollTo('sec-basic')">
         <span class="nav-icon">📝</span>
         <span class="nav-text">产品基础信息</span>
         <span class="nav-status empty" id="navBasic"></span>
       </div>
-      <div class="nav-item" onclick="scrollTo('sec-competitors')">
+      <div class="nav-item" onclick="navScrollTo('sec-competitors')">
         <span class="nav-icon">⚔️</span>
         <span class="nav-text">竞品信息</span>
         <span class="nav-status empty" id="navCompetitors"></span>
       </div>
-      <div class="nav-item" onclick="scrollTo('sec-supplement')">
+      <div class="nav-item" onclick="navScrollTo('sec-supplement')">
         <span class="nav-icon">📊</span>
         <span class="nav-text">补充运营数据</span>
         <span class="nav-status empty" id="navSupplement"></span>
       </div>
 
       <div class="nav-section-label">Seller Central 报告</div>
-      <div class="nav-item" onclick="scrollTo('sec-ad-reports')">
+      <div class="nav-item" onclick="navScrollTo('sec-ad-reports')">
         <span class="nav-icon">📈</span>
         <span class="nav-text">广告报告 (5份)</span>
         <span class="nav-status empty" id="navAdReports"></span>
       </div>
-      <div class="nav-item" onclick="scrollTo('sec-biz-reports')">
+      <div class="nav-item" onclick="navScrollTo('sec-biz-reports')">
         <span class="nav-icon">📋</span>
         <span class="nav-text">业务+退货+品牌分析</span>
         <span class="nav-status empty" id="navBizReports"></span>
       </div>
 
       <div class="nav-section-label">Listing 素材</div>
-      <div class="nav-item" onclick="scrollTo('sec-images')">
+      <div class="nav-item" onclick="navScrollTo('sec-images')">
         <span class="nav-icon">🖼️</span>
         <span class="nav-text">主图 (7张+视频)</span>
         <span class="nav-status empty" id="navImages"></span>
       </div>
-      <div class="nav-item" onclick="scrollTo('sec-aplus')">
+      <div class="nav-item" onclick="navScrollTo('sec-aplus')">
         <span class="nav-icon">✨</span>
         <span class="nav-text">A+内容截图</span>
         <span class="nav-status empty" id="navAplus"></span>
       </div>
-      <div class="nav-item" onclick="scrollTo('sec-listing-text')">
+      <div class="nav-item" onclick="navScrollTo('sec-listing-text')">
         <span class="nav-icon">📄</span>
         <span class="nav-text">标题/Bullet/Search Terms</span>
         <span class="nav-status empty" id="navListingText"></span>
       </div>
 
       <div class="nav-section-label">Rufus 截图</div>
-      <div class="nav-item" onclick="scrollTo('sec-rufus')">
+      <div class="nav-item" onclick="navScrollTo('sec-rufus')">
         <span class="nav-icon">🤖</span>
         <span class="nav-text">Rufus问答 (自身20题)</span>
         <span class="nav-status empty" id="navRufus"></span>
       </div>
 
       <div class="nav-section-label">手工数据</div>
-      <div class="nav-item" onclick="scrollTo('sec-ad-manual')">
+      <div class="nav-item" onclick="navScrollTo('sec-ad-manual')">
         <span class="nav-icon">✏️</span>
         <span class="nav-text">广告效率手填</span>
         <span class="nav-status empty" id="navAdManual"></span>
@@ -2125,11 +2125,12 @@ function updateProgress() {
   submitBtn.style.opacity = ready ? '1' : '0.5';
 }
 
-function scrollTo(id) {
+function navScrollTo(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   // Update active nav
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  event.currentTarget.classList.add('active');
+  const clicked = document.querySelector(`.nav-item[onclick*="${id}"]`);
+  if (clicked) clicked.classList.add('active');
 }
 
 function handleSubmit() {
