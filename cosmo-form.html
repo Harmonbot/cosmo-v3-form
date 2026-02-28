@@ -2135,24 +2135,15 @@ function navScrollTo(id) {
 
 function handleSubmit() {
   // ===== VALIDATION =====
-  // Clear previous errors
   document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
   document.querySelectorAll('.field-error-msg').forEach(el => el.remove());
   
   const errors = [];
   
-  // Required fields check
-  const requiredChecks = [
-    { sel: '#sec-basic input.mono', label: '产品ASIN', section: 'sec-basic' },
-    { sel: '#sec-basic select', label: 'Amazon站点', section: 'sec-basic' },
-  ];
-  
-  // Check basic text inputs (name + brand)
   const basicTexts = document.querySelectorAll('#sec-basic .field-grid-2 .field-input');
   if (!basicTexts[0]?.value?.trim()) errors.push({ el: basicTexts[0], msg: '请填写产品名称' });
   if (!basicTexts[1]?.value?.trim()) errors.push({ el: basicTexts[1], msg: '请填写品牌名' });
   
-  // Check ASIN
   const asinInput = document.querySelector('#sec-basic input.mono');
   if (!asinInput?.value?.trim()) {
     errors.push({ el: asinInput, msg: '请填写ASIN' });
@@ -2160,13 +2151,11 @@ function handleSubmit() {
     errors.push({ el: asinInput, msg: 'ASIN格式应为B0+8位字母数字' });
   }
   
-  // Check at least competitor 1 ASIN
   const comp1Asin = document.querySelector('.competitor-card:first-child input.mono');
   if (!comp1Asin?.value?.trim()) {
     errors.push({ el: comp1Asin, msg: '至少填写竞品1的ASIN' });
   }
   
-  // Show errors
   if (errors.length > 0) {
     errors.forEach(err => {
       if (err.el) {
@@ -2175,7 +2164,6 @@ function handleSubmit() {
         msgEl.className = 'field-error-msg';
         msgEl.textContent = err.msg;
         err.el.parentElement.appendChild(msgEl);
-        // Auto-clear on input
         err.el.addEventListener('input', function handler() {
           this.classList.remove('field-error');
           this.parentElement.querySelector('.field-error-msg')?.remove();
@@ -2184,45 +2172,108 @@ function handleSubmit() {
         });
       }
     });
-    // Scroll to first error
     errors[0].el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     showToast('请完成必填项', 'error');
     return;
   }
   
-  // ===== COLLECT DATA =====
+  // ===== COLLECT TEXT DATA =====
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.innerHTML = '⏳ 提交中...';
 
+  const data = collectFormData();
+  
+  // ===== COLLECT FILES =====
+  const fileGroups = collectFiles();
+  const hasFiles = Object.values(fileGroups).some(arr => arr.length > 0);
+  
+  console.log('📦 COSMO V3 Submit:', { data, fileCount: Object.entries(fileGroups).map(([k,v]) => `${k}:${v.length}`).join(', ') });
+
+  const WEBHOOK_URL = window.COSMO_WEBHOOK_URL || 'https://weizhu.zeabur.app/webhook/cosmo-v3-submit';
+  const FILE_WEBHOOK_URL = window.COSMO_FILE_WEBHOOK_URL || 'https://weizhu.zeabur.app/webhook/cosmo-v3-upload';
+
+  // Phase 1: Submit text data
+  fetch(WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  })
+  .then(async (result) => {
+    const recordId = result.recordId || 'unknown';
+    showToast('✅ 文本数据已保存', 'success');
+    
+    // Phase 2: Upload files if any
+    if (hasFiles) {
+      btn.innerHTML = '📤 上传文件中...';
+      let uploadCount = 0;
+      const totalFiles = Object.values(fileGroups).reduce((sum, arr) => sum + arr.length, 0);
+      
+      for (const [fieldName, files] of Object.entries(fileGroups)) {
+        for (const file of files) {
+          try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('recordId', recordId);
+            formData.append('fieldName', fieldName);
+            formData.append('asin', data.asin);
+            
+            await fetch(FILE_WEBHOOK_URL, {
+              method: 'POST',
+              body: formData
+            });
+            
+            uploadCount++;
+            btn.innerHTML = `📤 上传中 (${uploadCount}/${totalFiles})...`;
+          } catch (err) {
+            console.error(`File upload failed: ${file.name}`, err);
+          }
+        }
+      }
+      
+      showToast(`🎉 全部完成！${uploadCount}个文件已上传`, 'success');
+    } else {
+      showToast('🎉 诊断请求已提交', 'success');
+    }
+    
+    btn.innerHTML = '✅ 已提交';
+    btn.style.background = 'var(--green)';
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = '🚀 启动诊断';
+      btn.style.background = '';
+    }, 5000);
+  })
+  .catch(err => {
+    btn.disabled = false;
+    btn.innerHTML = '🚀 启动诊断';
+    showToast('提交失败: ' + err.message, 'error');
+    console.error('Submit error:', err);
+  });
+}
+
+// Collect all text form data
+function collectFormData() {
   const data = {
     mode: currentMode,
     timestamp: new Date().toISOString(),
     site: document.getElementById('siteSelect')?.value || 'US',
     currency: (SITE_CURRENCY[document.getElementById('siteSelect')?.value] || SITE_CURRENCY.US).name,
-    
-    // Basic info
     asin: document.querySelector('#sec-basic .mono')?.value?.trim() || '',
     productName: document.querySelectorAll('#sec-basic .field-grid-2 .field-input')[0]?.value?.trim() || '',
     brand: document.querySelectorAll('#sec-basic .field-grid-2 .field-input')[1]?.value?.trim() || '',
-    
-    // Competitors
     competitors: [],
-    
-    // Supplement
     supplement: {},
-    
-    // Rufus self (20 questions)
     rufusSelf: {},
-    
-    // Listing text
     listing: {},
-    
-    // Manual ad data
     manualAd: {},
   };
 
-  // Collect competitors + inline Rufus 3 QA
+  // Competitors + inline Rufus
   document.querySelectorAll('.competitor-card').forEach((card, i) => {
     const inputs = card.querySelectorAll('.field-grid .field-input');
     const comp = {
@@ -2245,7 +2296,7 @@ function handleSubmit() {
     data.competitors.push(comp);
   });
 
-  // Collect supplement fields
+  // Supplement
   const supSection = document.getElementById('sec-supplement');
   if (supSection) {
     const supInputs = supSection.querySelectorAll('input.field-input, textarea.field-input');
@@ -2255,7 +2306,7 @@ function handleSubmit() {
     });
   }
 
-  // Collect Rufus self answers
+  // Rufus self
   document.querySelectorAll('textarea[data-prefix="self"]').forEach(ta => {
     const qn = ta.getAttribute('data-qn');
     const field = RUFUS_SELF_QS.find(q => q.n == qn);
@@ -2268,7 +2319,7 @@ function handleSubmit() {
     }
   });
 
-  // Collect listing text
+  // Listing text
   const listingSection = document.getElementById('sec-listing-text');
   if (listingSection) {
     const textareas = listingSection.querySelectorAll('textarea');
@@ -2277,7 +2328,7 @@ function handleSubmit() {
     if (textareas[2]?.value?.trim()) data.listing.searchTerms = textareas[2].value.trim();
   }
 
-  // Collect manual ad table
+  // Manual ad table
   const adTable = document.querySelector('#sec-ad-manual .inline-table');
   if (adTable) {
     const channels = ['SP', 'SB', 'SD'];
@@ -2292,52 +2343,53 @@ function handleSubmit() {
         orders: cells[3]?.value?.trim() || ''
       });
     });
-    // 7-day metrics
     const metricInputs = document.querySelectorAll('#sec-ad-manual .field-grid-4 .field-input');
     data.manualAd.sales7d = metricInputs[0]?.value?.trim() || '';
     data.manualAd.sessions7d = metricInputs[1]?.value?.trim() || '';
     data.manualAd.cvr7d = metricInputs[2]?.value?.trim() || '';
     data.manualAd.returnRate30d = metricInputs[3]?.value?.trim() || '';
-    // Secondary metrics
     const metricInputs2 = document.querySelectorAll('#sec-ad-manual .field-grid-3 .field-input');
     data.manualAd.targetAcos = metricInputs2[0]?.value?.trim() || '';
     data.manualAd.fbaInventory = metricInputs2[1]?.value?.trim() || '';
     data.manualAd.daysOfInventory = metricInputs2[2]?.value?.trim() || '';
   }
 
-  // ===== SUBMIT TO N8N =====
-  // Configure your n8n webhook URL here
-  const WEBHOOK_URL = window.COSMO_WEBHOOK_URL || 'https://your-n8n-domain.com/webhook/cosmo-v3-submit';
-  
-  console.log('📦 COSMO V3 Submit Data:', JSON.stringify(data, null, 2));
+  return data;
+}
 
-  fetch(WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  })
-  .then(res => {
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  })
-  .then(result => {
-    btn.innerHTML = '✅ 已提交';
-    btn.style.background = 'var(--green)';
-    showToast('🎉 诊断请求已提交，工作流正在执行...', 'success');
-    
-    // Reset after 5s
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.innerHTML = '🚀 启动诊断';
-      btn.style.background = '';
-    }, 5000);
-  })
-  .catch(err => {
-    btn.disabled = false;
-    btn.innerHTML = '🚀 启动诊断';
-    showToast('提交失败: ' + err.message, 'error');
-    console.error('Submit error:', err);
+// Collect all files grouped by target field
+function collectFiles() {
+  const files = {
+    '广告报告文件': [],
+    '业务报告文件': [],
+    '主图截图': [],
+    'A加内容截图': [],
+  };
+  
+  // Ad reports (2 upload zones)
+  const adZones = document.querySelectorAll('#sec-ad-reports .upload-zone input[type="file"]');
+  adZones.forEach(input => {
+    Array.from(input.files || []).forEach(f => files['广告报告文件'].push(f));
   });
+  
+  // Biz reports (3 upload zones)
+  const bizZones = document.querySelectorAll('#sec-biz-reports .upload-zone input[type="file"]');
+  bizZones.forEach(input => {
+    Array.from(input.files || []).forEach(f => files['业务报告文件'].push(f));
+  });
+  
+  // Product images (8 image slots)
+  document.querySelectorAll('#sec-images .image-slot input[type="file"]').forEach(input => {
+    Array.from(input.files || []).forEach(f => files['主图截图'].push(f));
+  });
+  
+  // A+ content
+  const aplusInput = document.querySelector('#sec-aplus .upload-zone input[type="file"]');
+  if (aplusInput) {
+    Array.from(aplusInput.files || []).forEach(f => files['A加内容截图'].push(f));
+  }
+  
+  return files;
 }
 
 function showToast(msg, type) {
