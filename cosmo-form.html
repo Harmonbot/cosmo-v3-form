@@ -1,0 +1,2190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COSMO V3 诊断 — 数据采集</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Password gate */
+#pwGate {
+  position: fixed; inset: 0; z-index: 99999;
+  background: #08090c;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'DM Sans', 'Noto Sans SC', sans-serif;
+}
+#pwGate.hidden { display: none; }
+.pw-box {
+  text-align: center; padding: 48px 40px; background: #13151c;
+  border: 1px solid #1c2030; border-radius: 16px; width: 360px;
+}
+.pw-box h2 { color: #e8eaf2; font-size: 20px; margin: 0 0 6px; }
+.pw-box p { color: #565b72; font-size: 13px; margin: 0 0 24px; }
+.pw-box input {
+  width: 100%; padding: 12px 16px; background: #0d0f14; border: 1px solid #1c2030;
+  border-radius: 10px; color: #e8eaf2; font-size: 15px; text-align: center;
+  letter-spacing: 3px; outline: none; box-sizing: border-box;
+}
+.pw-box input:focus { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.08); }
+.pw-box button {
+  margin-top: 16px; width: 100%; padding: 12px; background: #f59e0b; color: #000;
+  font-weight: 700; border: none; border-radius: 10px; cursor: pointer; font-size: 14px;
+}
+.pw-box button:hover { background: #fbbf24; }
+.pw-err { color: #ef4444; font-size: 12px; margin-top: 10px; display: none; }
+</style>
+<script>
+// ===== PASSWORD CONFIG =====
+// Change this password before deploying
+const ACCESS_CODE = 'cosmo2026';
+// ===========================
+
+function checkPw() {
+  const input = document.getElementById('pwInput');
+  if (input.value === ACCESS_CODE) {
+    document.getElementById('pwGate').classList.add('hidden');
+    sessionStorage.setItem('cosmo_auth', '1');
+  } else {
+    document.getElementById('pwErr').style.display = 'block';
+    input.value = '';
+    input.focus();
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  if (sessionStorage.getItem('cosmo_auth') === '1') {
+    document.getElementById('pwGate').classList.add('hidden');
+  } else {
+    document.getElementById('pwInput')?.focus();
+    document.getElementById('pwInput')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') checkPw();
+    });
+  }
+});
+</script>
+<style>
+:root {
+  --bg: #08090c;
+  --bg-surface: #0f1116;
+  --bg-card: #13151c;
+  --bg-elevated: #191c26;
+  --bg-input: #0d0f14;
+  --border: #1c2030;
+  --border-focus: #f59e0b;
+  --border-hover: #2a3050;
+  --text: #e8eaf2;
+  --text-secondary: #9498ae;
+  --text-muted: #565b72;
+  --text-placeholder: #3d4258;
+  --accent: #f59e0b;
+  --accent-hover: #fbbf24;
+  --accent-glow: rgba(245,158,11,0.08);
+  --accent-glow-strong: rgba(245,158,11,0.15);
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.1);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.1);
+  --blue: #3b82f6;
+  --blue-dim: rgba(59,130,246,0.1);
+  --purple: #a855f7;
+  --purple-dim: rgba(168,85,247,0.1);
+  --cyan: #06b6d4;
+  --cyan-dim: rgba(6,182,212,0.1);
+  --orange: #f97316;
+  --orange-dim: rgba(249,115,22,0.1);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', 'Noto Sans SC', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ===== LAYOUT ===== */
+.app {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  padding: 32px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.sidebar-logo {
+  padding: 0 24px;
+  margin-bottom: 36px;
+}
+
+.sidebar-logo h1 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.sidebar-logo .version {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--accent-glow);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.sidebar-logo p {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Progress */
+.sidebar-progress {
+  padding: 0 24px;
+  margin-bottom: 32px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.progress-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.progress-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.progress-bar {
+  height: 6px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.mode-badges {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mode-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid;
+  transition: all var(--transition);
+}
+
+.mode-badge.ready {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: rgba(34,197,94,0.25);
+}
+
+.mode-badge.not-ready {
+  background: rgba(255,255,255,0.02);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+/* Sidebar nav */
+.sidebar-nav {
+  padding: 0 12px;
+}
+
+.nav-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 20px 12px 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+  margin-bottom: 2px;
+  position: relative;
+}
+
+.nav-item:hover { background: rgba(255,255,255,0.03); }
+
+.nav-item.active {
+  background: var(--accent-glow);
+}
+
+.nav-item.active .nav-text { color: var(--text); font-weight: 600; }
+
+.nav-icon {
+  font-size: 16px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.nav-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.nav-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nav-status.complete { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+.nav-status.partial { background: var(--orange); }
+.nav-status.empty { background: var(--border); }
+
+/* ===== MAIN CONTENT ===== */
+.main {
+  padding: 40px;
+  max-width: 920px;
+}
+
+@media (max-width: 900px) {
+  .main { padding: 24px 16px; }
+}
+
+/* Page header */
+.page-header {
+  margin-bottom: 36px;
+}
+
+.page-header h2 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+}
+
+.page-header p {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ===== MODE SELECTOR ===== */
+.mode-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.mode-option {
+  position: relative;
+  padding: 20px 24px;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.mode-option:hover { border-color: var(--border-hover); }
+
+.mode-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.mode-option.selected::after {
+  content: '✓';
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 22px;
+  height: 22px;
+  background: var(--accent);
+  color: #000;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mode-label {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.mode-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.mode-items {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ===== FORM SECTIONS ===== */
+.form-section {
+  margin-bottom: 40px;
+  animation: fadeUp 0.3s ease;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.form-section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.form-section-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.form-section-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.form-section-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.form-section-tag {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+}
+
+.tag-required { background: var(--red-dim); color: var(--red); }
+.tag-recommended { background: var(--blue-dim); color: var(--blue); }
+.tag-mode-b { background: var(--purple-dim); color: var(--purple); }
+
+/* ===== FORM FIELDS ===== */
+.field-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.field-grid-2 { grid-template-columns: 1fr 1fr; }
+.field-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.field-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+@media (max-width: 700px) {
+  .field-grid-2, .field-grid-3, .field-grid-4 { grid-template-columns: 1fr; }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-label .required {
+  color: var(--red);
+  font-size: 14px;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.field-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  transition: all var(--transition);
+  width: 100%;
+}
+
+.field-input::placeholder {
+  color: var(--text-placeholder);
+}
+
+.field-input:hover { border-color: var(--border-hover); }
+
+.field-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.field-input.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+select.field-input {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23565b72' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+textarea.field-input {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* ===== FILE UPLOAD ZONES ===== */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.upload-zone:hover {
+  border-color: var(--border-hover);
+  background: rgba(255,255,255,0.01);
+}
+
+.upload-zone.dragover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.upload-zone.has-files {
+  border-style: solid;
+  border-color: rgba(34,197,94,0.3);
+  background: var(--green-dim);
+}
+
+.upload-icon {
+  font-size: 28px;
+  margin-bottom: 10px;
+  opacity: 0.6;
+}
+
+.upload-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.upload-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.upload-formats {
+  margin-top: 10px;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.format-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+input[type="file"] { display: none; }
+
+/* Uploaded file list */
+.file-list {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.file-item-icon { font-size: 14px; }
+.file-item-name { font-size: 12px; flex: 1; color: var(--text); font-weight: 500; }
+.file-item-size { font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+.file-item-remove {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: all var(--transition);
+  background: none;
+  border: none;
+}
+
+.file-item-remove:hover {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+/* Multi-image upload grid */
+.image-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 700px) {
+  .image-upload-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.image-slot {
+  aspect-ratio: 1;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.image-slot:hover {
+  border-color: var(--border-hover);
+  background: rgba(255,255,255,0.015);
+}
+
+.image-slot.filled {
+  border-style: solid;
+  border-color: rgba(34,197,94,0.3);
+  background: var(--green-dim);
+}
+
+.image-slot-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.image-slot-icon {
+  font-size: 22px;
+  opacity: 0.4;
+}
+
+.image-slot-preview {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  border-radius: calc(var(--radius-sm) - 2px);
+}
+
+.image-slot-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--transition);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.image-slot.filled:hover .image-slot-overlay { opacity: 1; }
+
+/* ===== AD DATA TABLE INPUT ===== */
+.inline-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.inline-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.inline-table td {
+  padding: 4px 4px;
+  border-bottom: 1px solid rgba(28,32,48,0.4);
+}
+
+.inline-table .row-label {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.inline-table input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+  width: 100%;
+  transition: all var(--transition);
+}
+
+.inline-table input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.inline-table input::placeholder { color: var(--text-placeholder); }
+
+/* ===== TEXT INPUT CARDS ===== */
+.text-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.text-card-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.015);
+}
+
+.text-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.text-card-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.text-card textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.7;
+}
+
+.text-card textarea::placeholder { color: var(--text-placeholder); }
+
+/* ===== ACTION BUTTONS ===== */
+.actions-bar {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(to top, var(--bg) 60%, transparent);
+  padding: 24px 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.btn {
+  padding: 12px 28px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  border: none;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(245,158,11,0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+}
+
+.actions-spacer { flex: 1; }
+
+.save-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ===== RUFUS GUIDE ===== */
+.rufus-guide {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.rufus-guide-header {
+  padding: 14px 18px;
+  background: var(--cyan-dim);
+  border-bottom: 1px solid rgba(6,182,212,0.15);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.rufus-guide-header:hover { background: rgba(6,182,212,0.15); }
+
+.rufus-guide-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cyan);
+  flex: 1;
+}
+
+.rufus-guide-toggle {
+  font-size: 12px;
+  color: var(--cyan);
+  transition: transform var(--transition);
+}
+
+.rufus-guide-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease;
+}
+
+.rufus-guide.open .rufus-guide-body {
+  max-height: 1200px;
+}
+
+.rufus-guide.open .rufus-guide-toggle {
+  transform: rotate(180deg);
+}
+
+.rufus-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.rufus-table th {
+  padding: 8px 14px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.015);
+}
+
+.rufus-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(28,32,48,0.3);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.rufus-table tr:hover td { background: rgba(255,255,255,0.01); }
+
+.rufus-q {
+  color: var(--cyan);
+  font-weight: 500;
+  font-style: italic;
+}
+
+/* ===== COMPETITOR INPUT CARDS ===== */
+.competitor-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 12px;
+}
+
+.competitor-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.competitor-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.competitor-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.competitor-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Comp Rufus inline */
+.comp-rufus-inline {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+
+.comp-rufus-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cyan);
+  margin-bottom: 12px;
+}
+
+.comp-rufus-qa-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 700px) {
+  .comp-rufus-qa-row { grid-template-columns: 1fr; }
+}
+
+.comp-rufus-qa {
+  display: flex;
+  flex-direction: column;
+}
+
+.comp-rufus-qa input {
+  font-size: 12px;
+}
+
+.comp-rufus-qa textarea {
+  font-size: 12px;
+  min-height: 48px;
+}
+
+/* ===== DIVIDER ===== */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 40px 0;
+}
+
+/* ===== TOOLTIP ===== */
+.tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: help;
+  position: relative;
+}
+
+.tip:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: var(--shadow-md);
+}
+
+/* ===== HIDDEN SECTIONS (Mode B only) ===== */
+.mode-b-section {
+  transition: opacity 0.3s ease, max-height 0.4s ease;
+}
+
+.mode-b-section.hidden {
+  opacity: 0.3;
+  pointer-events: none;
+  position: relative;
+}
+
+.mode-b-section.hidden::after {
+  content: '🔒 模式B专属 — 选择全量诊断后解锁';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(8,9,12,0.7);
+  border-radius: var(--radius);
+  z-index: 10;
+}
+
+/* ===== ALERT ===== */
+.alert-info {
+  padding: 12px 16px;
+  background: var(--blue-dim);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--blue);
+  line-height: 1.6;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.alert-info-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+</style>
+</head>
+<body>
+
+<!-- Password Gate -->
+<div id="pwGate">
+  <div class="pw-box">
+    <h2>🔐 COSMO V3</h2>
+    <p>请输入访问密码</p>
+    <input type="password" id="pwInput" placeholder="••••••••" autocomplete="off">
+    <button onclick="checkPw()">进入系统</button>
+    <div class="pw-err" id="pwErr">密码错误，请重试</div>
+  </div>
+</div>
+
+<div class="app">
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>COSMO <span class="version">V3</span></h1>
+      <p>Amazon Listing诊断系统</p>
+    </div>
+
+    <!-- Progress -->
+    <div class="sidebar-progress">
+      <div class="progress-header">
+        <span class="progress-label">数据采集进度</span>
+        <span class="progress-count" id="progressCount">3 / 21</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 14%"></div>
+      </div>
+      <div class="mode-badges">
+        <div class="mode-badge not-ready" id="modeABadge">模式A 未就绪</div>
+        <div class="mode-badge not-ready" id="modeBBadge">模式B 未就绪</div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">基础输入</div>
+      <div class="nav-item active" onclick="scrollTo('sec-mode')">
+        <span class="nav-icon">⚡</span>
+        <span class="nav-text">诊断模式</span>
+        <span class="nav-status complete"></span>
+      </div>
+      <div class="nav-item" onclick="scrollTo('sec-basic')">
+        <span class="nav-icon">📝</span>
+        <span class="nav-text">产品基础信息</span>
+        <span class="nav-status empty" id="navBasic"></span>
+      </div>
+      <div class="nav-item" onclick="scrollTo('sec-competitors')">
+        <span class="nav-icon">⚔️</span>
+        <span class="nav-text">竞品信息</span>
+        <span class="nav-status empty" id="navCompetitors"></span>
+      </div>
+      <div class="nav-item" onclick="scrollTo('sec-supplement')">
+        <span class="nav-icon">📊</span>
+        <span class="nav-text">补充运营数据</span>
+        <span class="nav-status empty" id="navSupplement"></span>
+      </div>
+
+      <div class="nav-section-label">Seller Central 报告</div>
+      <div class="nav-item" onclick="scrollTo('sec-ad-reports')">
+        <span class="nav-icon">📈</span>
+        <span class="nav-text">广告报告 (5份)</span>
+        <span class="nav-status empty" id="navAdReports"></span>
+      </div>
+      <div class="nav-item" onclick="scrollTo('sec-biz-reports')">
+        <span class="nav-icon">📋</span>
+        <span class="nav-text">业务+退货+品牌分析</span>
+        <span class="nav-status empty" id="navBizReports"></span>
+      </div>
+
+      <div class="nav-section-label">Listing 素材</div>
+      <div class="nav-item" onclick="scrollTo('sec-images')">
+        <span class="nav-icon">🖼️</span>
+        <span class="nav-text">主图 (7张+视频)</span>
+        <span class="nav-status empty" id="navImages"></span>
+      </div>
+      <div class="nav-item" onclick="scrollTo('sec-aplus')">
+        <span class="nav-icon">✨</span>
+        <span class="nav-text">A+内容截图</span>
+        <span class="nav-status empty" id="navAplus"></span>
+      </div>
+      <div class="nav-item" onclick="scrollTo('sec-listing-text')">
+        <span class="nav-icon">📄</span>
+        <span class="nav-text">标题/Bullet/Search Terms</span>
+        <span class="nav-status empty" id="navListingText"></span>
+      </div>
+
+      <div class="nav-section-label">Rufus 截图</div>
+      <div class="nav-item" onclick="scrollTo('sec-rufus')">
+        <span class="nav-icon">🤖</span>
+        <span class="nav-text">Rufus问答 (自身20题)</span>
+        <span class="nav-status empty" id="navRufus"></span>
+      </div>
+
+      <div class="nav-section-label">手工数据</div>
+      <div class="nav-item" onclick="scrollTo('sec-ad-manual')">
+        <span class="nav-icon">✏️</span>
+        <span class="nav-text">广告效率手填</span>
+        <span class="nav-status empty" id="navAdManual"></span>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main class="main">
+
+    <!-- MODE SELECTOR -->
+    <section id="sec-mode">
+      <div class="page-header">
+        <h2>创建新诊断</h2>
+        <p>选择诊断模式，然后按需填写数据。系统会根据已有数据自动判断可执行的分析范围。</p>
+      </div>
+
+      <div class="mode-selector">
+        <div class="mode-option selected" onclick="selectMode('a', this)">
+          <div class="mode-label">⚡ 模式A · 纯Sorftime分析</div>
+          <div class="mode-desc">仅提供ASIN和竞品，系统自动调用Sorftime数据完成市场分析。</div>
+          <div class="mode-items">需提供：ASIN + 站点 + 3个竞品ASIN → 输出 Step 1-5, 6.1-6.3, 7</div>
+        </div>
+        <div class="mode-option" onclick="selectMode('b', this)">
+          <div class="mode-label">🔬 模式B · 全量诊断</div>
+          <div class="mode-desc">提供后台报告、截图、Rufus问答，获得完整8步诊断报告。</div>
+          <div class="mode-items">需提供：模式A全部 + 9份后台报告 + 图片素材 + Rufus截图</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 1. BASIC INFO ===== -->
+    <section class="form-section" id="sec-basic">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--accent-glow); color:var(--accent);">📝</div>
+        <div>
+          <div class="form-section-title">产品基础信息</div>
+          <div class="form-section-subtitle">所有分析的起点</div>
+        </div>
+        <span class="form-section-tag tag-required">必填</span>
+      </div>
+
+      <div class="field-grid field-grid-2">
+        <div class="field">
+          <label class="field-label">产品ASIN <span class="required">*</span></label>
+          <input type="text" class="field-input mono" placeholder="B0XXXXXXXXX" maxlength="10" id="asinInput">
+          <span class="field-hint">主力变体的ASIN</span>
+        </div>
+        <div class="field">
+          <label class="field-label">Amazon站点 <span class="required">*</span></label>
+          <select class="field-input" id="siteSelect" onchange="onSiteChange(this.value)">
+            <option value="US" selected>🇺🇸 US — 美国站</option>
+            <option value="GB">🇬🇧 GB — 英国站</option>
+            <option value="DE">🇩🇪 DE — 德国站</option>
+            <option value="FR">🇫🇷 FR — 法国站</option>
+            <option value="JP">🇯🇵 JP — 日本站</option>
+            <option value="CA">🇨🇦 CA — 加拿大站</option>
+            <option value="IT">🇮🇹 IT — 意大利站</option>
+            <option value="ES">🇪🇸 ES — 西班牙站</option>
+            <option value="MX">🇲🇽 MX — 墨西哥站</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-grid" style="margin-top:16px;">
+        <div class="field-grid field-grid-2">
+          <div class="field">
+            <label class="field-label">产品名称（中文简称）<span class="required">*</span></label>
+            <input type="text" class="field-input" placeholder="如：如：产品型号 + 品类中文名">
+          </div>
+          <div class="field">
+            <label class="field-label">品牌名 <span class="required">*</span></label>
+            <input type="text" class="field-input" placeholder="如：你的品牌名">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 2. COMPETITORS ===== -->
+    <section class="form-section" id="sec-competitors">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--red-dim); color:var(--red);">⚔️</div>
+        <div>
+          <div class="form-section-title">核心竞品</div>
+          <div class="form-section-subtitle">3个直接竞品，按威胁度排序</div>
+        </div>
+        <span class="form-section-tag tag-required">必填</span>
+      </div>
+
+      <div class="competitor-card">
+        <div class="competitor-header">
+          <div class="competitor-num" style="background:var(--red-dim); color:var(--red);">1</div>
+          <div>
+            <div class="competitor-label">最大威胁竞品</div>
+            <div class="competitor-desc">价格相近、流量最大的直接竞争对手</div>
+          </div>
+        </div>
+        <div class="field-grid field-grid-3">
+          <div class="field">
+            <label class="field-label">ASIN <span class="required">*</span></label>
+            <input type="text" class="field-input mono" placeholder="B09XXXXXXX">
+          </div>
+          <div class="field">
+            <label class="field-label">品牌/产品名</label>
+            <input type="text" class="field-input" placeholder="如：品牌名 + 型号">
+          </div>
+          <div class="field">
+            <label class="field-label">威胁原因</label>
+            <input type="text" class="field-input" placeholder="如：同价位流量最大">
+          </div>
+        </div>
+        <div class="comp-rufus-inline">
+          <div class="comp-rufus-label">🤖 Rufus 页面默认问题 <span style="font-weight:400;color:var(--text-muted);">— 复制竞品页面底部 Ask Rufus 显示的3个问题及回答</span></div>
+          <div class="comp-rufus-qa-row">
+            <div class="comp-rufus-qa">
+              <input type="text" class="field-input" placeholder="问题1：如 Can it be used with a smartphone?">
+              <textarea class="field-input" rows="2" placeholder="Rufus回答..." style="margin-top:4px;"></textarea>
+            </div>
+            <div class="comp-rufus-qa">
+              <input type="text" class="field-input" placeholder="问题2：如 Does it have a microphone?">
+              <textarea class="field-input" rows="2" placeholder="Rufus回答..." style="margin-top:4px;"></textarea>
+            </div>
+            <div class="comp-rufus-qa">
+              <input type="text" class="field-input" placeholder="问题3：如 Is it adjustable?">
+              <textarea class="field-input" rows="2" placeholder="Rufus回答..." style="margin-top:4px;"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="competitor-card">
+        <div class="competitor-header">
+          <div class="competitor-num" style="background:var(--orange-dim); color:var(--orange);">2</div>
+          <div>
+            <div class="competitor-label">同价位竞品</div>
+            <div class="competitor-desc">价格区间重叠的主要对手</div>
+          </div>
+        </div>
+        <div class="field-grid field-grid-3">
+          <div class="field">
+            <label class="field-label">ASIN <span class="required">*</span></label>
+            <input type="text" class="field-input mono" placeholder="B09XXXXXXX">
+          </div>
+          <div class="field">
+            <label class="field-label">品牌/产品名</label>
+            <input type="text" class="field-input" placeholder="">
+          </div>
+          <div class="field">
+            <label class="field-label">威胁原因</label>
+            <input type="text" class="field-input" placeholder="">
+          </div>
+        </div>
+        <div class="comp-rufus-inline">
+          <div class="comp-rufus-label">🤖 Rufus 页面默认问题</div>
+          <div class="comp-rufus-qa-row">
+            <div class="comp-rufus-qa">
+              <input type="text" class="field-input" placeholder="问题1">
+              <textarea class="field-input" rows="2" placeholder="Rufus回答..." style="margin-top:4px;"></textarea>
+            </div>
+            <div class="comp-rufus-qa">
+              <input type="text" class="field-input" placeholder="问题2">
+              <textarea class="field-input" rows="2" placeholder="Rufus回答..." style="margin-top:4px;"></textarea>
+            </div>
+            <div class="comp-rufus-qa">
+              <input type="text" class="field-input" placeholder="问题3">
+              <textarea class="field-input" rows="2" placeholder="Rufus回答..." style="margin-top:4px;"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="competitor-card">
+        <div class="competitor-header">
+          <div class="competitor-num" style="background:var(--blue-dim); color:var(--blue);">3</div>
+          <div>
+            <div class="competitor-label">新兴威胁竞品</div>
+            <div class="competitor-desc">近期增长迅猛、潜在威胁</div>
+          </div>
+        </div>
+        <div class="field-grid field-grid-3">
+          <div class="field">
+            <label class="field-label">ASIN <span class="required">*</span></label>
+            <input type="text" class="field-input mono" placeholder="B09XXXXXXX">
+          </div>
+          <div class="field">
+            <label class="field-label">品牌/产品名</label>
+            <input type="text" class="field-input" placeholder="">
+          </div>
+          <div class="field">
+            <label class="field-label">威胁原因</label>
+            <input type="text" class="field-input" placeholder="">
+          </div>
+        </div>
+        <div class="comp-rufus-inline">
+          <div class="comp-rufus-label">🤖 Rufus 页面默认问题</div>
+          <div class="comp-rufus-qa-row">
+            <div class="comp-rufus-qa">
+              <input type="text" class="field-input" placeholder="问题1">
+              <textarea class="field-input" rows="2" placeholder="Rufus回答..." style="margin-top:4px;"></textarea>
+            </div>
+            <div class="comp-rufus-qa">
+              <input type="text" class="field-input" placeholder="问题2">
+              <textarea class="field-input" rows="2" placeholder="Rufus回答..." style="margin-top:4px;"></textarea>
+            </div>
+            <div class="comp-rufus-qa">
+              <input type="text" class="field-input" placeholder="问题3">
+              <textarea class="field-input" rows="2" placeholder="Rufus回答..." style="margin-top:4px;"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 3. SUPPLEMENT ===== -->
+    <section class="form-section" id="sec-supplement">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--blue-dim); color:var(--blue);">📊</div>
+        <div>
+          <div class="form-section-title">补充运营数据</div>
+          <div class="form-section-subtitle">提升分析精度，非必填</div>
+        </div>
+        <span class="form-section-tag tag-recommended">推荐</span>
+      </div>
+
+      <div class="field-grid field-grid-4">
+        <div class="field">
+          <label class="field-label">FOB成本价 <span class="tip" data-tip="含包装的出厂价（当地货币）">?</span></label>
+          <input type="text" class="field-input mono currency-input" placeholder="$12.50">
+        </div>
+        <div class="field">
+          <label class="field-label">FBA配送费/单</label>
+          <input type="text" class="field-input mono currency-input" placeholder="$5.80">
+        </div>
+        <div class="field">
+          <label class="field-label">当前月销量</label>
+          <input type="text" class="field-input mono" placeholder="5,582">
+        </div>
+        <div class="field">
+          <label class="field-label">月广告花费</label>
+          <input type="text" class="field-input mono currency-input" placeholder="$3,200">
+        </div>
+      </div>
+
+      <div class="field-grid field-grid-3" style="margin-top:16px;">
+        <div class="field">
+          <label class="field-label">目标ACOS (%)</label>
+          <input type="text" class="field-input mono" placeholder="25%">
+        </div>
+        <div class="field">
+          <label class="field-label">旺季月份</label>
+          <input type="text" class="field-input" placeholder="如 7-8月, 11-12月">
+        </div>
+        <div class="field">
+          <label class="field-label">同品牌其他ASIN</label>
+          <input type="text" class="field-input mono" placeholder="B09XX, B0AXX">
+        </div>
+      </div>
+
+      <div class="field-grid" style="margin-top:16px;">
+        <div class="field">
+          <label class="field-label">产品核心卖点（你认为的）</label>
+          <textarea class="field-input" rows="2" placeholder="如：核心卖点1、核心卖点2、核心卖点3"></textarea>
+        </div>
+        <div class="field-grid field-grid-2" style="margin-top:0;">
+          <div class="field">
+            <label class="field-label">主要差评问题（已知）</label>
+            <textarea class="field-input" rows="2" placeholder="如：已知的差评问题"></textarea>
+          </div>
+          <div class="field">
+            <label class="field-label">当前广告结构简述</label>
+            <textarea class="field-input" rows="2" placeholder="如：当前广告结构简述"></textarea>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label">产品迭代计划</label>
+          <input type="text" class="field-input" placeholder="如：下一代改版计划或新变体">
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ===== MODE B: AD REPORTS ===== -->
+    <section class="form-section mode-b-section" id="sec-ad-reports">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--green-dim); color:var(--green);">📈</div>
+        <div>
+          <div class="form-section-title">广告报告上传</div>
+          <div class="form-section-subtitle">Step 6 广告诊断核心数据 — 5份CSV/XLSX文件</div>
+        </div>
+        <span class="form-section-tag tag-mode-b">模式B</span>
+      </div>
+
+      <div class="alert-info">
+        <span class="alert-info-icon">💡</span>
+        <div>从 Seller Central → 广告 → 报告中心下载。系统会自动识别报告类型，无需严格命名。但建议按 <strong>{ASIN}_类型_时间段.csv</strong> 格式命名。</div>
+      </div>
+
+      <div class="field-grid field-grid-2" style="margin-top:16px;">
+        <div class="upload-zone" onclick="this.querySelector('input').click()" id="uploadAdCampaign">
+          <input type="file" multiple accept=".csv,.xlsx,.xls">
+          <div class="upload-icon">📊</div>
+          <div class="upload-title">SP / SB / SD Campaign 报告</div>
+          <div class="upload-desc">近7天数据 · 3份文件（SP必须，SB/SD无则注明）</div>
+          <div class="upload-formats">
+            <span class="format-tag">CSV</span>
+            <span class="format-tag">XLSX</span>
+          </div>
+          <div class="file-list" id="adCampaignFiles"></div>
+        </div>
+
+        <div class="upload-zone" onclick="this.querySelector('input').click()" id="uploadAdSearch">
+          <input type="file" multiple accept=".csv,.xlsx,.xls">
+          <div class="upload-icon">🔍</div>
+          <div class="upload-title">SP搜索词 + 广告位报告</div>
+          <div class="upload-desc">近30天数据 · 2份文件</div>
+          <div class="upload-formats">
+            <span class="format-tag">CSV</span>
+            <span class="format-tag">XLSX</span>
+          </div>
+          <div class="file-list" id="adSearchFiles"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== MODE B: BIZ REPORTS ===== -->
+    <section class="form-section mode-b-section" id="sec-biz-reports">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--purple-dim); color:var(--purple);">📋</div>
+        <div>
+          <div class="form-section-title">业务报告 + 退货 + 品牌分析</div>
+          <div class="form-section-subtitle">Step 4/8 退货归因 + R-Score计算</div>
+        </div>
+        <span class="form-section-tag tag-mode-b">模式B</span>
+      </div>
+
+      <div class="field-grid field-grid-3" style="margin-top:8px;">
+        <div class="upload-zone" onclick="this.querySelector('input').click()" style="padding:20px 16px;">
+          <input type="file" accept=".csv,.xlsx,.xls">
+          <div class="upload-icon">📈</div>
+          <div class="upload-title">业务报告</div>
+          <div class="upload-desc">Detail Page · 7天</div>
+          <div class="file-list" id="bizReportFiles"></div>
+        </div>
+        <div class="upload-zone" onclick="this.querySelector('input').click()" style="padding:20px 16px;">
+          <input type="file" accept=".csv,.xlsx,.xls">
+          <div class="upload-icon">📦</div>
+          <div class="upload-title">FBA退货报告</div>
+          <div class="upload-desc">30天</div>
+          <div class="file-list" id="returnFiles"></div>
+        </div>
+        <div class="upload-zone" onclick="this.querySelector('input').click()" style="padding:20px 16px;">
+          <input type="file" multiple accept=".csv,.xlsx,.xls">
+          <div class="upload-icon">🏷️</div>
+          <div class="upload-title">搜索查询绩效 + 品牌分析</div>
+          <div class="upload-desc">ASIN视图 · R分核心</div>
+          <div class="file-list" id="brandFiles"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== MODE B: IMAGES ===== -->
+    <section class="form-section mode-b-section" id="sec-images">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--cyan-dim); color:var(--cyan);">🖼️</div>
+        <div>
+          <div class="form-section-title">主图截图 (7张 + 视频封面)</div>
+          <div class="form-section-subtitle">Step 5.3 逐图COSMO审计 — 每张单独截图</div>
+        </div>
+        <span class="form-section-tag tag-mode-b">模式B</span>
+      </div>
+
+      <div class="image-upload-grid">
+        <div class="image-slot" onclick="this.querySelector('input')?.click()">
+          <input type="file" accept="image/*" style="display:none;">
+          <span class="image-slot-icon">📷</span>
+          <span class="image-slot-label">主图 1 (白底)</span>
+        </div>
+        <div class="image-slot" onclick="this.querySelector('input')?.click()">
+          <input type="file" accept="image/*" style="display:none;">
+          <span class="image-slot-icon">📷</span>
+          <span class="image-slot-label">图 2</span>
+        </div>
+        <div class="image-slot" onclick="this.querySelector('input')?.click()">
+          <input type="file" accept="image/*" style="display:none;">
+          <span class="image-slot-icon">📷</span>
+          <span class="image-slot-label">图 3</span>
+        </div>
+        <div class="image-slot" onclick="this.querySelector('input')?.click()">
+          <input type="file" accept="image/*" style="display:none;">
+          <span class="image-slot-icon">📷</span>
+          <span class="image-slot-label">图 4</span>
+        </div>
+        <div class="image-slot" onclick="this.querySelector('input')?.click()">
+          <input type="file" accept="image/*" style="display:none;">
+          <span class="image-slot-icon">📷</span>
+          <span class="image-slot-label">图 5</span>
+        </div>
+        <div class="image-slot" onclick="this.querySelector('input')?.click()">
+          <input type="file" accept="image/*" style="display:none;">
+          <span class="image-slot-icon">📷</span>
+          <span class="image-slot-label">图 6</span>
+        </div>
+        <div class="image-slot" onclick="this.querySelector('input')?.click()">
+          <input type="file" accept="image/*" style="display:none;">
+          <span class="image-slot-icon">📷</span>
+          <span class="image-slot-label">图 7</span>
+        </div>
+        <div class="image-slot" onclick="this.querySelector('input')?.click()">
+          <input type="file" accept="image/*" style="display:none;">
+          <span class="image-slot-icon">🎬</span>
+          <span class="image-slot-label">视频封面</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== MODE B: A+ ===== -->
+    <section class="form-section mode-b-section" id="sec-aplus">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--purple-dim); color:var(--purple);">✨</div>
+        <div>
+          <div class="form-section-title">A+内容截图</div>
+          <div class="form-section-subtitle">Step 5.4 A+内容COSMO审计 — 滚动截全部模块</div>
+        </div>
+        <span class="form-section-tag tag-mode-b">模式B</span>
+      </div>
+
+      <div class="upload-zone" onclick="this.querySelector('input').click()">
+        <input type="file" multiple accept="image/*">
+        <div class="upload-icon">🖼️</div>
+        <div class="upload-title">拖放或点击上传A+内容截图</div>
+        <div class="upload-desc">可分段截图，支持多张上传。系统按上传顺序排列。</div>
+        <div class="upload-formats">
+          <span class="format-tag">PNG</span>
+          <span class="format-tag">JPG</span>
+          <span class="format-tag">WEBP</span>
+        </div>
+        <div class="file-list" id="aplusFiles"></div>
+      </div>
+    </section>
+
+    <!-- ===== MODE B: LISTING TEXT ===== -->
+    <section class="form-section mode-b-section" id="sec-listing-text">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--accent-glow); color:var(--accent);">📄</div>
+        <div>
+          <div class="form-section-title">Listing文本内容</div>
+          <div class="form-section-subtitle">Step 5.1/5.2/5.5 标题、Bullet Points、后台Search Terms</div>
+        </div>
+        <span class="form-section-tag tag-mode-b">模式B</span>
+      </div>
+
+      <div class="text-card" style="margin-bottom:12px;">
+        <div class="text-card-header">
+          <span style="font-size:14px;">📌</span>
+          <span class="text-card-label">当前标题 (Title)</span>
+          <span class="text-card-hint">英文原文 · 从后台编辑Listing复制</span>
+        </div>
+        <textarea placeholder="粘贴当前Listing标题英文原文..."></textarea>
+      </div>
+
+      <div class="text-card" style="margin-bottom:12px;">
+        <div class="text-card-header">
+          <span style="font-size:14px;">📋</span>
+          <span class="text-card-label">五点描述 (Bullet Points)</span>
+          <span class="text-card-hint">5条Bullet · 英文原文 · 每条一行</span>
+        </div>
+        <textarea rows="8" placeholder="• Bullet 1: ...&#10;• Bullet 2: ...&#10;• Bullet 3: ...&#10;• Bullet 4: ...&#10;• Bullet 5: ..."></textarea>
+      </div>
+
+      <div class="text-card">
+        <div class="text-card-header">
+          <span style="font-size:14px;">🔑</span>
+          <span class="text-card-label">后台 Search Terms</span>
+          <span class="text-card-hint">从后台编辑Listing → Search Terms所有行复制</span>
+        </div>
+        <textarea rows="4" placeholder="粘贴后台Search Terms所有行..."></textarea>
+      </div>
+    </section>
+
+    <!-- ===== MODE B: RUFUS ===== -->
+    <section class="form-section mode-b-section" id="sec-rufus">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--cyan-dim); color:var(--cyan);">🤖</div>
+        <div>
+          <div class="form-section-title">Rufus问答记录 — 自身产品</div>
+          <div class="form-section-subtitle">20个COSMO维度问题 — 复制问题问Rufus，粘贴回答</div>
+        </div>
+        <span class="form-section-tag tag-mode-b">模式B</span>
+      </div>
+
+      <div class="alert-info">
+        <span class="alert-info-icon">💡</span>
+        <div><strong>操作方法：</strong>Amazon App/网页 → 进入<strong>自己的</strong>产品页 → 点击 Ask Rufus → 逐条复制下方提示词发送（格式统一为 <code style="background:rgba(6,182,212,0.15); padding:1px 6px; border-radius:3px; color:var(--cyan);">Tell me more about this product: {字段}</code>）→ 粘贴Rufus回答。<br><strong>此格式适用于所有品类</strong>，Rufus会根据产品页面上下文自动识别回答。最后5题(16-20)使用自然语言提问。</div>
+      </div>
+
+      <!-- Self: 20 questions only -->
+      <div class="rufus-panel" id="rp-self"></div>
+    </section>
+
+    <style>
+      .rufus-tab-btn.active { background:var(--cyan-dim)!important; color:var(--cyan)!important; border-color:rgba(6,182,212,0.3)!important; }
+      .rq { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:10px; overflow:hidden; transition:border-color 0.2s; }
+      .rq:hover { border-color:var(--border-hover); }
+      .rq-head { display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(255,255,255,0.015); border-bottom:1px solid rgba(255,255,255,0.03); flex-wrap:wrap; }
+      .rq-num { width:24px; height:24px; border-radius:6px; background:var(--cyan-dim); color:var(--cyan); font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .rq-field { font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; background:rgba(255,255,255,0.04); color:var(--text-muted); letter-spacing:0.3px; text-transform:uppercase; }
+      .rq-q { font-size:13px; color:var(--cyan); font-style:italic; flex:1; min-width:200px; cursor:pointer; }
+      .rq-q:hover { color:var(--accent); }
+      .rq-copy { background:none; border:none; cursor:pointer; font-size:14px; padding:2px 6px; border-radius:4px; transition:background 0.15s; }
+      .rq-copy:hover { background:rgba(255,255,255,0.06); }
+      .rq-fix { font-size:10px; color:var(--text-muted); white-space:nowrap; }
+      .rq textarea { width:100%; background:transparent; border:none; padding:10px 14px; font-size:13px; color:var(--text); font-family:'DM Sans','Noto Sans SC',sans-serif; outline:none; resize:vertical; min-height:52px; line-height:1.6; }
+      .rq textarea::placeholder { color:var(--text-placeholder); }
+      .rq textarea:focus { background:rgba(6,182,212,0.03); }
+      .rq-section-label { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; padding:16px 0 8px; border-bottom:1px solid var(--border); margin-bottom:12px; }
+      .rufus-progress { margin-top:14px; padding:10px 14px; background:rgba(255,255,255,0.02); border-radius:var(--radius-sm); border:1px solid var(--border); font-size:12px; color:var(--text-muted); }
+      .copied-toast { position:fixed; top:20px; right:20px; background:var(--green); color:#000; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; z-index:9999; opacity:0; transition:opacity 0.3s; pointer-events:none; }
+      .copied-toast.show { opacity:1; }
+    </style>
+    <div class="copied-toast" id="copiedToast">✓ 已复制到剪贴板</div>
+
+    <div class="divider"></div>
+
+    <!-- ===== MANUAL AD DATA ===== -->
+    <section class="form-section mode-b-section" id="sec-ad-manual">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--orange-dim); color:var(--orange);">✏️</div>
+        <div>
+          <div class="form-section-title">广告效率手填（备选）</div>
+          <div class="form-section-subtitle">无法导出报告时，手工填写核心数据</div>
+        </div>
+        <span class="form-section-tag tag-recommended">可选</span>
+      </div>
+
+      <div class="alert-info">
+        <span class="alert-info-icon">ℹ️</span>
+        <div>如果已上传广告CSV报告，此表可跳过。此表用于无法导出报告时的备选方案。</div>
+      </div>
+
+      <div style="overflow-x:auto;">
+      <table class="inline-table">
+        <thead>
+          <tr><th>渠道</th><th class="currency-header">花费 ($)</th><th class="currency-header">销售额 ($)</th><th>ACOS (%)</th><th>订单数</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="row-label">SP（商品推广）</td>
+            <td><input type="text" placeholder="1,200"></td>
+            <td><input type="text" placeholder="4,800"></td>
+            <td><input type="text" placeholder="25.0"></td>
+            <td><input type="text" placeholder="168"></td>
+          </tr>
+          <tr>
+            <td class="row-label">SB（品牌推广）</td>
+            <td><input type="text" placeholder="—"></td>
+            <td><input type="text" placeholder="—"></td>
+            <td><input type="text" placeholder="—"></td>
+            <td><input type="text" placeholder="—"></td>
+          </tr>
+          <tr>
+            <td class="row-label">SD（展示推广）</td>
+            <td><input type="text" placeholder="—"></td>
+            <td><input type="text" placeholder="—"></td>
+            <td><input type="text" placeholder="—"></td>
+            <td><input type="text" placeholder="—"></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+
+      <div class="field-grid field-grid-4" style="margin-top:20px;">
+        <div class="field">
+          <label class="field-label">7天总销售额</label>
+          <input type="text" class="field-input mono currency-input" placeholder="$8,400">
+        </div>
+        <div class="field">
+          <label class="field-label">7天Sessions</label>
+          <input type="text" class="field-input mono" placeholder="18,432">
+        </div>
+        <div class="field">
+          <label class="field-label">7天CVR (%)</label>
+          <input type="text" class="field-input mono" placeholder="7.03">
+        </div>
+        <div class="field">
+          <label class="field-label">30天退货率 (%)</label>
+          <input type="text" class="field-input mono" placeholder="8.7">
+        </div>
+      </div>
+
+      <div class="field-grid field-grid-3" style="margin-top:12px;">
+        <div class="field">
+          <label class="field-label">目标ACOS (%)</label>
+          <input type="text" class="field-input mono" placeholder="25">
+        </div>
+        <div class="field">
+          <label class="field-label">FBA可售库存（件）</label>
+          <input type="text" class="field-input mono" placeholder="2,400">
+        </div>
+        <div class="field">
+          <label class="field-label">库存可售天数</label>
+          <input type="text" class="field-input mono" placeholder="45">
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SUBMIT BAR ===== -->
+    <div class="actions-bar">
+      <button class="btn btn-secondary">💾 保存草稿</button>
+      <div class="actions-spacer"></div>
+      <span class="save-hint" id="submitHint">✅ 模式A就绪 — 可启动Sorftime分析</span>
+      <button class="btn btn-primary" id="submitBtn" onclick="handleSubmit()">
+        🚀 启动诊断
+      </button>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// Mode selection
+let currentMode = 'a';
+
+// Currency mapping per site
+const SITE_CURRENCY = {
+  US: { symbol: '$', name: 'USD', example: { fob: '$12.50', fba: '$5.80', adSpend: '$3,200', sales7d: '$8,400' }},
+  GB: { symbol: '£', name: 'GBP', example: { fob: '£10.00', fba: '£4.50', adSpend: '£2,500', sales7d: '£6,800' }},
+  DE: { symbol: '€', name: 'EUR', example: { fob: '€11.00', fba: '€5.20', adSpend: '€2,800', sales7d: '€7,200' }},
+  FR: { symbol: '€', name: 'EUR', example: { fob: '€11.00', fba: '€5.20', adSpend: '€2,800', sales7d: '€7,200' }},
+  IT: { symbol: '€', name: 'EUR', example: { fob: '€11.00', fba: '€5.20', adSpend: '€2,800', sales7d: '€7,200' }},
+  ES: { symbol: '€', name: 'EUR', example: { fob: '€11.00', fba: '€5.20', adSpend: '€2,800', sales7d: '€7,200' }},
+  JP: { symbol: '¥', name: 'JPY', example: { fob: '¥1,800', fba: '¥850', adSpend: '¥480,000', sales7d: '¥1,260,000' }},
+  CA: { symbol: 'C$', name: 'CAD', example: { fob: 'C$16.50', fba: 'C$7.80', adSpend: 'C$4,300', sales7d: 'C$11,200' }},
+  MX: { symbol: 'MX$', name: 'MXN', example: { fob: 'MX$220', fba: 'MX$105', adSpend: 'MX$58,000', sales7d: 'MX$152,000' }},
+};
+
+function onSiteChange(site) {
+  const c = SITE_CURRENCY[site] || SITE_CURRENCY.US;
+  
+  // Update currency-input placeholders
+  const inputs = document.querySelectorAll('.currency-input');
+  const fields = ['fob', 'fba', 'adSpend', 'sales7d'];
+  inputs.forEach((inp, i) => {
+    if (fields[i] && c.example[fields[i]]) {
+      inp.placeholder = c.example[fields[i]];
+    }
+  });
+  
+  // Update table headers
+  document.querySelectorAll('.currency-header').forEach(th => {
+    th.textContent = th.textContent.replace(/\(.*?\)/, `(${c.symbol})`);
+  });
+  
+  // Show currency badge
+  let badge = document.getElementById('currencyBadge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 'currencyBadge';
+    badge.style.cssText = 'margin-top:8px; font-size:11px; color:var(--accent); font-weight:600;';
+    document.getElementById('siteSelect').parentElement.appendChild(badge);
+  }
+  badge.textContent = `💱 货币单位：${c.symbol} (${c.name})`;
+}
+
+function selectMode(mode, el) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  
+  const modeBSections = document.querySelectorAll('.mode-b-section');
+  modeBSections.forEach(s => {
+    if (mode === 'b') {
+      s.classList.remove('hidden');
+    } else {
+      s.classList.add('hidden');
+    }
+  });
+  
+  updateProgress();
+}
+
+// Initialize mode A (hide mode B sections)
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.mode-b-section').forEach(s => s.classList.add('hidden'));
+  setupFileUploads();
+  setupImageSlots();
+  // Init Rufus panels - only self product
+  buildRufusQA(document.getElementById('rp-self'), RUFUS_SELF_QS, 'self', false);
+});
+
+// File upload handlers
+function setupFileUploads() {
+  document.querySelectorAll('.upload-zone').forEach(zone => {
+    const input = zone.querySelector('input[type="file"]');
+    if (!input) return;
+    
+    // Drag & drop
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      input.files = e.dataTransfer.files;
+      handleFileChange(zone, input);
+    });
+    
+    input.addEventListener('change', () => handleFileChange(zone, input));
+  });
+}
+
+function handleFileChange(zone, input) {
+  const fileList = zone.querySelector('.file-list');
+  if (!fileList) return;
+  
+  zone.classList.toggle('has-files', input.files.length > 0);
+  fileList.innerHTML = '';
+  
+  Array.from(input.files).forEach((file, i) => {
+    const ext = file.name.split('.').pop().toLowerCase();
+    const icon = { csv: '📊', xlsx: '📊', xls: '📊', png: '🖼️', jpg: '🖼️', jpeg: '🖼️', webp: '🖼️' }[ext] || '📄';
+    const size = file.size < 1024*1024 
+      ? (file.size/1024).toFixed(0) + ' KB'
+      : (file.size/1024/1024).toFixed(1) + ' MB';
+    
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    item.innerHTML = `
+      <span class="file-item-icon">${icon}</span>
+      <span class="file-item-name">${file.name}</span>
+      <span class="file-item-size">${size}</span>
+      <button class="file-item-remove" onclick="event.stopPropagation();">✕</button>
+    `;
+    fileList.appendChild(item);
+  });
+  
+  updateProgress();
+}
+
+// Image slot handlers
+function setupImageSlots() {
+  document.querySelectorAll('.image-slot').forEach(slot => {
+    const input = slot.querySelector('input[type="file"]');
+    if (!input) return;
+    
+    input.addEventListener('change', () => {
+      if (input.files.length > 0) {
+        const file = input.files[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          slot.classList.add('filled');
+          // Replace content with preview
+          const existingImg = slot.querySelector('.image-slot-preview');
+          if (existingImg) existingImg.remove();
+          const existingOverlay = slot.querySelector('.image-slot-overlay');
+          if (existingOverlay) existingOverlay.remove();
+          
+          const img = document.createElement('img');
+          img.className = 'image-slot-preview';
+          img.src = e.target.result;
+          slot.appendChild(img);
+          
+          const overlay = document.createElement('div');
+          overlay.className = 'image-slot-overlay';
+          overlay.textContent = '点击替换';
+          slot.appendChild(overlay);
+          
+          updateProgress();
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  });
+}
+
+// Progress tracking
+function updateProgress() {
+  // Simplified progress counting
+  let filled = 0;
+  let total = currentMode === 'a' ? 6 : 21;
+  
+  // Check basic fields
+  if (document.getElementById('asinInput')?.value) filled++;
+  if (document.getElementById('siteSelect')?.value) filled++;
+  
+  // Count filled text inputs in required sections
+  document.querySelectorAll('#sec-basic .field-input, #sec-competitors .field-input.mono').forEach(input => {
+    if (input.value && input.value.trim()) filled++;
+  });
+  
+  filled = Math.min(filled, total);
+  
+  const pct = Math.round((filled / total) * 100);
+  document.getElementById('progressCount').textContent = `${filled} / ${total}`;
+  document.getElementById('progressFill').style.width = pct + '%';
+  
+  // Mode badges
+  const modeAReady = filled >= 6;
+  const modeABadge = document.getElementById('modeABadge');
+  modeABadge.className = 'mode-badge ' + (modeAReady ? 'ready' : 'not-ready');
+  modeABadge.textContent = modeAReady ? '✅ 模式A 就绪' : '模式A 未就绪';
+}
+
+function scrollTo(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Update active nav
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
+function handleSubmit() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ 提交中...';
+
+  // Collect all form data
+  const data = {
+    mode: currentMode,
+    timestamp: new Date().toISOString(),
+    // Basic info
+    asin: document.querySelector('#sec-basic .mono')?.value || '',
+    site: document.getElementById('siteSelect')?.value || 'US',
+    productName: document.querySelectorAll('#sec-basic .field-input:not(.mono):not(select)')[0]?.value || '',
+    brand: document.querySelectorAll('#sec-basic .field-input:not(.mono):not(select)')[1]?.value || '',
+    // Competitors
+    competitors: [],
+    // Supplement
+    supplement: {},
+    // Rufus self (20 questions)
+    rufusSelf: {},
+    // Listing text
+    listing: {},
+    // Manual ad data
+    manualAd: {},
+  };
+
+  // Collect competitors
+  document.querySelectorAll('.competitor-card').forEach((card, i) => {
+    const inputs = card.querySelectorAll('.field-input');
+    const comp = {
+      asin: inputs[0]?.value || '',
+      name: inputs[1]?.value || '',
+      reason: inputs[2]?.value || '',
+      rufusQuestions: []
+    };
+    // Collect inline Rufus 3 QA
+    const qaInputs = card.querySelectorAll('.comp-rufus-qa-row input, .comp-rufus-qa-row textarea');
+    for (let j = 0; j < qaInputs.length; j += 2) {
+      comp.rufusQuestions.push({
+        question: qaInputs[j]?.value || '',
+        answer: qaInputs[j+1]?.value || ''
+      });
+    }
+    data.competitors.push(comp);
+  });
+
+  // Collect supplement fields
+  const supSection = document.getElementById('sec-supplement');
+  if (supSection) {
+    const supInputs = supSection.querySelectorAll('input.field-input, textarea.field-input');
+    const supKeys = ['fobCost','fbaFee','monthlySales','monthlyAdSpend','targetAcos','peakMonths','otherAsins','coreSelling','complaints','adStructure','iterationPlan'];
+    supInputs.forEach((inp, i) => {
+      if (supKeys[i]) data.supplement[supKeys[i]] = inp.value || '';
+    });
+  }
+
+  // Collect Rufus self answers
+  document.querySelectorAll('textarea[data-prefix="self"]').forEach(ta => {
+    const qn = ta.getAttribute('data-qn');
+    if (ta.value.trim()) data.rufusSelf['q' + qn] = ta.value.trim();
+  });
+
+  // Collect listing text
+  const listingSection = document.getElementById('sec-listing');
+  if (listingSection) {
+    const textareas = listingSection.querySelectorAll('textarea');
+    data.listing.title = textareas[0]?.value || '';
+    data.listing.bullets = textareas[1]?.value || '';
+    data.listing.searchTerms = textareas[2]?.value || '';
+  }
+
+  // Determine submit URL (same origin for n8n hosted, or configurable)
+  const submitUrl = window.COSMO_SUBMIT_URL || (window.location.origin + '/webhook/cosmo-submit');
+
+  fetch(submitUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(result => {
+    btn.innerHTML = '✅ 已提交';
+    btn.style.background = 'var(--green)';
+    document.getElementById('submitHint').textContent = '🎉 诊断请求已提交，工作流正在执行...';
+    document.getElementById('submitHint').style.color = 'var(--green)';
+  })
+  .catch(err => {
+    btn.disabled = false;
+    btn.innerHTML = '🚀 启动诊断';
+    alert('提交失败: ' + err.message + '\n\n请检查网络连接或联系管理员。');
+  });
+}
+
+// ===== RUFUS Q&A SYSTEM =====
+const RUFUS_SELF_QS = [
+  {n:1, f:'is_a', q:'Tell me more about this product: is_a', fix:'标题'},
+  {n:2, f:'used_as', q:'Tell me more about this product: used_as', fix:'Bullet / A+'},
+  {n:3, f:'used_on', q:'Tell me more about this product: used_on', fix:'Bullet 2 + 图5'},
+  {n:4, f:'location', q:'Tell me more about this product: location', fix:'A+ 场景模块'},
+  {n:5, f:'func', q:'Tell me more about this product: func', fix:'标题 + Bullet 1'},
+  {n:6, f:'capable_of', q:'Tell me more about this product: capable_of', fix:'Bullet 4'},
+  {n:7, f:'event', q:'Tell me more about this product: event', fix:'A+ 场景模块'},
+  {n:8, f:'used_to', q:'Tell me more about this product: used_to', fix:'Bullet 1 + A+'},
+  {n:9, f:'used_with', q:'Tell me more about this product: used_with', fix:'A+ 搭配模块'},
+  {n:10, f:'used_by', q:'Tell me more about this product: used_by', fix:'Bullet 3 + 图4'},
+  {n:11, f:'interest', q:'Tell me more about this product: interest', fix:'A+ 用户见证'},
+  {n:12, f:'xIs_a', q:'Tell me more about this product: xIs_a', fix:'TikTok人设'},
+  {n:13, f:'xWant', q:'Tell me more about this product: xWant', fix:'Bullet 5 + A+'},
+  {n:14, f:'audience', q:'Tell me more about this product: audience', fix:'Bullet 5'},
+  {n:15, f:'body', q:'Tell me more about this product: body', fix:'Bullet 3 + 图4'},
+  {n:16, f:'差评暴露', q:'What are the common complaints about this product?', fix:'Bullet 5 排雷', special:'red'},
+  {n:17, f:'卖点验证', q:'What makes this product stand out from competitors?', fix:'标题前半段', special:'green'},
+  {n:18, f:'性价比', q:'Is this product worth the price?', fix:'A+ 对比模块', special:'accent'},
+  {n:19, f:'竞品对比', q:'How does this compare to similar products?', fix:'全Listing', special:'purple'},
+  {n:20, f:'兼容限制', q:'What are the limitations or compatibility issues?', fix:'Bullet 5 + A+', special:'orange'},
+];
+
+const RUFUS_COMP_QS = [1,3,5,10,11,13,16,20]; // indices into SELF_QS
+
+function buildRufusQA(container, questions, prefix, isComp) {
+  let html = '';
+  if (isComp) {
+    html += `<div class="alert-info" style="margin-bottom:16px;"><span class="alert-info-icon">⚔️</span><div>仅需回答8个关键问题。进入竞品产品页面，用同样方式问Rufus。将问题中的 "this" 理解为竞品。</div></div>`;
+  }
+  
+  const items = isComp 
+    ? RUFUS_SELF_QS.filter(q => RUFUS_COMP_QS.includes(q.n))
+    : RUFUS_SELF_QS;
+  
+  let prevSection = '';
+  items.forEach((q, i) => {
+    // Section divider for self
+    if (!isComp && i === 15 && prevSection !== 'extra') {
+      html += `<div class="rq-section-label">▶ 额外高价值诊断问题</div>`;
+      prevSection = 'extra';
+    }
+    if (!isComp && i === 0) {
+      html += `<div class="rq-section-label">▶ COSMO 15维核心问题</div>`;
+    }
+    
+    let fieldStyle = '';
+    if (q.special === 'red') fieldStyle = 'background:var(--red-dim);color:var(--red);';
+    else if (q.special === 'green') fieldStyle = 'background:var(--green-dim);color:var(--green);';
+    else if (q.special === 'accent') fieldStyle = 'background:var(--accent-glow);color:var(--accent);';
+    else if (q.special === 'purple') fieldStyle = 'background:var(--purple-dim);color:var(--purple);';
+    else if (q.special === 'orange') fieldStyle = 'background:var(--orange-dim);color:var(--orange);';
+    
+    html += `<div class="rq">
+      <div class="rq-head">
+        <span class="rq-num">${q.n}</span>
+        <span class="rq-field" ${fieldStyle ? `style="${fieldStyle}"` : ''}>${q.f}</span>
+        <span class="rq-q" onclick="copyQuestion(this)" title="点击复制问题">"${q.q}"</span>
+        <button class="rq-copy" onclick="copyQuestion(this.previousElementSibling)" title="复制问题">📋</button>
+        ${!isComp ? `<span class="rq-fix">→ ${q.fix}</span>` : ''}
+      </div>
+      <textarea class="rufus-qa-answer" data-prefix="${prefix}" data-qn="${q.n}" placeholder="粘贴Rufus的回答..." oninput="updateRufusProgress('${prefix}')"></textarea>
+    </div>`;
+  });
+  
+  const total = items.length;
+  html += `<div class="rufus-progress">💡 <strong>填写进度：</strong><span id="rp-${prefix}-count">0</span>/${total} 已填写</div>`;
+  
+  container.innerHTML = html;
+}
+
+function copyQuestion(el) {
+  const text = el.textContent.replace(/^"|"$/g, '');
+  navigator.clipboard.writeText(text).then(() => {
+    const toast = document.getElementById('copiedToast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1500);
+  });
+}
+
+function switchRufusTab(tab, btn) {
+  // No longer needed - only self panel exists
+}
+
+function updateRufusProgress(prefix) {
+  const answers = document.querySelectorAll(`textarea[data-prefix="${prefix}"]`);
+  let filled = 0;
+  answers.forEach(a => { if (a.value.trim()) filled++; });
+  const counter = document.getElementById(`rp-${prefix}-count`);
+  if (counter) counter.textContent = filled;
+}
+
+// Rufus panels initialized in main DOMContentLoaded above
+</script>
+</body>
+</html>
