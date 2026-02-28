@@ -289,6 +289,19 @@ body {
 .nav-status.partial { background: var(--orange); }
 .nav-status.empty { background: var(--border); }
 
+/* Validation */
+.field-error { border-color: var(--red) !important; animation: shake 0.4s ease; }
+.field-error-msg { color: var(--red); font-size: 11px; margin-top: 4px; display: block; }
+@keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-4px);} 75%{transform:translateX(4px);} }
+.submit-toast {
+  position: fixed; top: 24px; right: 24px; padding: 14px 24px; border-radius: 12px;
+  font-size: 14px; font-weight: 600; z-index: 9999; animation: slideIn 0.3s ease;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+.submit-toast.success { background: var(--green); color: #000; }
+.submit-toast.error { background: var(--red); color: #fff; }
+@keyframes slideIn { from{opacity:0;transform:translateY(-20px);} to{opacity:1;transform:translateY(0);} }
+
 /* ===== MAIN CONTENT ===== */
 .main {
   padding: 40px;
@@ -1116,10 +1129,10 @@ input[type="file"] { display: none; }
     <div class="sidebar-progress">
       <div class="progress-header">
         <span class="progress-label">数据采集进度</span>
-        <span class="progress-count" id="progressCount">3 / 21</span>
+        <span class="progress-count" id="progressCount">0 / 7</span>
       </div>
       <div class="progress-bar">
-        <div class="progress-fill" id="progressFill" style="width: 14%"></div>
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
       </div>
       <div class="mode-badges">
         <div class="mode-badge not-ready" id="modeABadge">模式A 未就绪</div>
@@ -1257,7 +1270,7 @@ input[type="file"] { display: none; }
         <div class="field-grid field-grid-2">
           <div class="field">
             <label class="field-label">产品名称（中文简称）<span class="required">*</span></label>
-            <input type="text" class="field-input" placeholder="如：如：产品型号 + 品类中文名">
+            <input type="text" class="field-input" placeholder="如：产品型号 + 品类中文名">
           </div>
           <div class="field">
             <label class="field-label">品牌名 <span class="required">*</span></label>
@@ -1877,6 +1890,13 @@ document.addEventListener('DOMContentLoaded', () => {
   setupImageSlots();
   // Init Rufus panels - only self product
   buildRufusQA(document.getElementById('rp-self'), RUFUS_SELF_QS, 'self', false);
+  
+  // Global input listener for real-time progress
+  document.addEventListener('input', () => updateProgress());
+  document.addEventListener('change', () => updateProgress());
+  
+  // Initial progress calc
+  updateProgress();
 });
 
 // File upload handlers
@@ -1965,30 +1985,144 @@ function setupImageSlots() {
 
 // Progress tracking
 function updateProgress() {
-  // Simplified progress counting
-  let filled = 0;
-  let total = currentMode === 'a' ? 6 : 21;
+  // ===== Section-level tracking =====
+  const sections = {};
   
-  // Check basic fields
-  if (document.getElementById('asinInput')?.value) filled++;
-  if (document.getElementById('siteSelect')?.value) filled++;
+  // 1. Basic info: ASIN + site + name + brand (4 required)
+  const basicInputs = document.querySelectorAll('#sec-basic input.field-input, #sec-basic select.field-input');
+  let basicFilled = 0, basicTotal = 4;
+  basicInputs.forEach(inp => { if (inp.value && inp.value.trim()) basicFilled++; });
+  sections.basic = { filled: Math.min(basicFilled, basicTotal), total: basicTotal };
   
-  // Count filled text inputs in required sections
-  document.querySelectorAll('#sec-basic .field-input, #sec-competitors .field-input.mono').forEach(input => {
-    if (input.value && input.value.trim()) filled++;
+  // 2. Competitors: 3 ASINs required for Mode A, + Rufus QA for Mode B
+  let compFilled = 0, compTotal = 3;
+  document.querySelectorAll('.competitor-card').forEach(card => {
+    const asinInput = card.querySelector('.field-input.mono');
+    if (asinInput?.value?.trim()) compFilled++;
+  });
+  sections.competitors = { filled: Math.min(compFilled, compTotal), total: compTotal };
+  
+  // 3. Supplement (optional but tracked)
+  const supInputs = document.querySelectorAll('#sec-supplement input.field-input, #sec-supplement textarea.field-input');
+  let supFilled = 0;
+  supInputs.forEach(inp => { if (inp.value?.trim()) supFilled++; });
+  sections.supplement = { filled: supFilled, total: supInputs.length };
+  
+  // 4. Ad reports (file uploads)
+  let adReportFilled = 0;
+  document.querySelectorAll('#sec-ad-reports .upload-zone').forEach(zone => {
+    if (zone.classList.contains('has-files')) adReportFilled++;
+  });
+  sections.adReports = { filled: adReportFilled, total: 5 };
+  
+  // 5. Biz reports
+  let bizFilled = 0;
+  document.querySelectorAll('#sec-biz-reports .upload-zone').forEach(zone => {
+    if (zone.classList.contains('has-files')) bizFilled++;
+  });
+  sections.bizReports = { filled: bizFilled, total: 4 };
+  
+  // 6. Images
+  let imgFilled = 0;
+  document.querySelectorAll('#sec-images .image-slot').forEach(slot => {
+    if (slot.querySelector('img')?.src) imgFilled++;
+  });
+  sections.images = { filled: imgFilled, total: 8 };
+  
+  // 7. A+ content
+  let aplusFilled = 0;
+  document.querySelectorAll('#sec-aplus .upload-zone').forEach(zone => {
+    if (zone.classList.contains('has-files')) aplusFilled++;
+  });
+  sections.aplus = { filled: aplusFilled, total: 1 };
+  
+  // 8. Listing text
+  let listFilled = 0;
+  document.querySelectorAll('#sec-listing-text textarea').forEach(ta => {
+    if (ta.value?.trim()) listFilled++;
+  });
+  sections.listingText = { filled: listFilled, total: 3 };
+  
+  // 9. Rufus self (20 answers)
+  let rufusFilled = 0;
+  document.querySelectorAll('textarea[data-prefix="self"]').forEach(ta => {
+    if (ta.value?.trim()) rufusFilled++;
+  });
+  sections.rufus = { filled: rufusFilled, total: 20 };
+  
+  // 10. Manual ad data
+  let manualFilled = 0;
+  document.querySelectorAll('#sec-ad-manual input, #sec-ad-manual select').forEach(inp => {
+    if (inp.value?.trim() && inp.value !== '—') manualFilled++;
+  });
+  sections.adManual = { filled: manualFilled, total: document.querySelectorAll('#sec-ad-manual input, #sec-ad-manual select').length || 1 };
+  
+  // ===== Update nav status dots =====
+  const navMap = {
+    navBasic: sections.basic,
+    navCompetitors: sections.competitors,
+    navSupplement: sections.supplement,
+    navAdReports: sections.adReports,
+    navBizReports: sections.bizReports,
+    navImages: sections.images,
+    navAplus: sections.aplus,
+    navListingText: sections.listingText,
+    navRufus: sections.rufus,
+    navAdManual: sections.adManual,
+  };
+  
+  Object.entries(navMap).forEach(([id, s]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = 'nav-status';
+    if (s.filled === 0) el.classList.add('empty');
+    else if (s.filled >= s.total) el.classList.add('complete');
+    else el.classList.add('partial');
   });
   
-  filled = Math.min(filled, total);
+  // ===== Overall progress =====
+  // Mode A requires: basic(4) + competitors(3) = 7
+  // Mode B requires: all sections
+  let filled, total;
+  if (currentMode === 'a') {
+    filled = sections.basic.filled + sections.competitors.filled + sections.supplement.filled;
+    total = sections.basic.total + sections.competitors.total + sections.supplement.total;
+  } else {
+    filled = Object.values(sections).reduce((sum, s) => sum + s.filled, 0);
+    total = Object.values(sections).reduce((sum, s) => sum + s.total, 0);
+  }
   
-  const pct = Math.round((filled / total) * 100);
+  const pct = total > 0 ? Math.round((filled / total) * 100) : 0;
   document.getElementById('progressCount').textContent = `${filled} / ${total}`;
   document.getElementById('progressFill').style.width = pct + '%';
   
-  // Mode badges
-  const modeAReady = filled >= 6;
+  // ===== Mode readiness =====
+  const modeAReady = sections.basic.filled >= 4 && sections.competitors.filled >= 3;
+  const modeBReady = modeAReady && sections.rufus.filled >= 15 && sections.listingText.filled >= 2;
+  
   const modeABadge = document.getElementById('modeABadge');
   modeABadge.className = 'mode-badge ' + (modeAReady ? 'ready' : 'not-ready');
   modeABadge.textContent = modeAReady ? '✅ 模式A 就绪' : '模式A 未就绪';
+  
+  const modeBBadge = document.getElementById('modeBBadge');
+  modeBBadge.className = 'mode-badge ' + (modeBReady ? 'ready' : 'not-ready');
+  modeBBadge.textContent = modeBReady ? '✅ 模式B 就绪' : '模式B 未就绪';
+  
+  // Submit hint
+  const hint = document.getElementById('submitHint');
+  if (currentMode === 'a') {
+    hint.textContent = modeAReady ? '✅ 模式A就绪 — 可启动Sorftime分析' : '⚠️ 请完成必填项：ASIN、站点、产品名、品牌、3个竞品ASIN';
+    hint.style.color = modeAReady ? 'var(--green)' : 'var(--orange)';
+  } else {
+    hint.textContent = modeBReady ? '✅ 模式B就绪 — 可启动全量诊断' : '⚠️ 模式B需补充更多数据';
+    hint.style.color = modeBReady ? 'var(--green)' : 'var(--orange)';
+  }
+  
+  // Submit button state
+  const submitBtn = document.getElementById('submitBtn');
+  const ready = currentMode === 'a' ? modeAReady : modeBReady;
+  submitBtn.disabled = !ready;
+  submitBtn.style.opacity = ready ? '1' : '0.5';
 }
 
 function scrollTo(id) {
@@ -1999,48 +2133,114 @@ function scrollTo(id) {
 }
 
 function handleSubmit() {
+  // ===== VALIDATION =====
+  // Clear previous errors
+  document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+  document.querySelectorAll('.field-error-msg').forEach(el => el.remove());
+  
+  const errors = [];
+  
+  // Required fields check
+  const requiredChecks = [
+    { sel: '#sec-basic input.mono', label: '产品ASIN', section: 'sec-basic' },
+    { sel: '#sec-basic select', label: 'Amazon站点', section: 'sec-basic' },
+  ];
+  
+  // Check basic text inputs (name + brand)
+  const basicTexts = document.querySelectorAll('#sec-basic .field-grid-2 .field-input');
+  if (!basicTexts[0]?.value?.trim()) errors.push({ el: basicTexts[0], msg: '请填写产品名称' });
+  if (!basicTexts[1]?.value?.trim()) errors.push({ el: basicTexts[1], msg: '请填写品牌名' });
+  
+  // Check ASIN
+  const asinInput = document.querySelector('#sec-basic input.mono');
+  if (!asinInput?.value?.trim()) {
+    errors.push({ el: asinInput, msg: '请填写ASIN' });
+  } else if (!/^B0[A-Z0-9]{8}$/i.test(asinInput.value.trim())) {
+    errors.push({ el: asinInput, msg: 'ASIN格式应为B0+8位字母数字' });
+  }
+  
+  // Check at least competitor 1 ASIN
+  const comp1Asin = document.querySelector('.competitor-card:first-child input.mono');
+  if (!comp1Asin?.value?.trim()) {
+    errors.push({ el: comp1Asin, msg: '至少填写竞品1的ASIN' });
+  }
+  
+  // Show errors
+  if (errors.length > 0) {
+    errors.forEach(err => {
+      if (err.el) {
+        err.el.classList.add('field-error');
+        const msgEl = document.createElement('span');
+        msgEl.className = 'field-error-msg';
+        msgEl.textContent = err.msg;
+        err.el.parentElement.appendChild(msgEl);
+        // Auto-clear on input
+        err.el.addEventListener('input', function handler() {
+          this.classList.remove('field-error');
+          this.parentElement.querySelector('.field-error-msg')?.remove();
+          this.removeEventListener('input', handler);
+          updateProgress();
+        });
+      }
+    });
+    // Scroll to first error
+    errors[0].el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showToast('请完成必填项', 'error');
+    return;
+  }
+  
+  // ===== COLLECT DATA =====
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.innerHTML = '⏳ 提交中...';
 
-  // Collect all form data
   const data = {
     mode: currentMode,
     timestamp: new Date().toISOString(),
-    // Basic info
-    asin: document.querySelector('#sec-basic .mono')?.value || '',
     site: document.getElementById('siteSelect')?.value || 'US',
-    productName: document.querySelectorAll('#sec-basic .field-input:not(.mono):not(select)')[0]?.value || '',
-    brand: document.querySelectorAll('#sec-basic .field-input:not(.mono):not(select)')[1]?.value || '',
+    currency: (SITE_CURRENCY[document.getElementById('siteSelect')?.value] || SITE_CURRENCY.US).name,
+    
+    // Basic info
+    asin: document.querySelector('#sec-basic .mono')?.value?.trim() || '',
+    productName: document.querySelectorAll('#sec-basic .field-grid-2 .field-input')[0]?.value?.trim() || '',
+    brand: document.querySelectorAll('#sec-basic .field-grid-2 .field-input')[1]?.value?.trim() || '',
+    
     // Competitors
     competitors: [],
+    
     // Supplement
     supplement: {},
+    
     // Rufus self (20 questions)
     rufusSelf: {},
+    
     // Listing text
     listing: {},
+    
     // Manual ad data
     manualAd: {},
   };
 
-  // Collect competitors
+  // Collect competitors + inline Rufus 3 QA
   document.querySelectorAll('.competitor-card').forEach((card, i) => {
-    const inputs = card.querySelectorAll('.field-input');
+    const inputs = card.querySelectorAll('.field-grid .field-input');
     const comp = {
-      asin: inputs[0]?.value || '',
-      name: inputs[1]?.value || '',
-      reason: inputs[2]?.value || '',
-      rufusQuestions: []
+      rank: i + 1,
+      asin: inputs[0]?.value?.trim() || '',
+      name: inputs[1]?.value?.trim() || '',
+      reason: inputs[2]?.value?.trim() || '',
+      rufusDefault: []
     };
-    // Collect inline Rufus 3 QA
-    const qaInputs = card.querySelectorAll('.comp-rufus-qa-row input, .comp-rufus-qa-row textarea');
-    for (let j = 0; j < qaInputs.length; j += 2) {
-      comp.rufusQuestions.push({
-        question: qaInputs[j]?.value || '',
-        answer: qaInputs[j+1]?.value || ''
-      });
-    }
+    card.querySelectorAll('.comp-rufus-qa').forEach(qa => {
+      const qInput = qa.querySelector('input');
+      const aInput = qa.querySelector('textarea');
+      if (qInput?.value?.trim() || aInput?.value?.trim()) {
+        comp.rufusDefault.push({
+          question: qInput?.value?.trim() || '',
+          answer: aInput?.value?.trim() || ''
+        });
+      }
+    });
     data.competitors.push(comp);
   });
 
@@ -2050,45 +2250,104 @@ function handleSubmit() {
     const supInputs = supSection.querySelectorAll('input.field-input, textarea.field-input');
     const supKeys = ['fobCost','fbaFee','monthlySales','monthlyAdSpend','targetAcos','peakMonths','otherAsins','coreSelling','complaints','adStructure','iterationPlan'];
     supInputs.forEach((inp, i) => {
-      if (supKeys[i]) data.supplement[supKeys[i]] = inp.value || '';
+      if (supKeys[i] && inp.value?.trim()) data.supplement[supKeys[i]] = inp.value.trim();
     });
   }
 
   // Collect Rufus self answers
   document.querySelectorAll('textarea[data-prefix="self"]').forEach(ta => {
     const qn = ta.getAttribute('data-qn');
-    if (ta.value.trim()) data.rufusSelf['q' + qn] = ta.value.trim();
+    const field = RUFUS_SELF_QS.find(q => q.n == qn);
+    if (ta.value.trim()) {
+      data.rufusSelf['q' + qn] = {
+        field: field?.f || '',
+        prompt: field?.q || '',
+        answer: ta.value.trim()
+      };
+    }
   });
 
   // Collect listing text
-  const listingSection = document.getElementById('sec-listing');
+  const listingSection = document.getElementById('sec-listing-text');
   if (listingSection) {
     const textareas = listingSection.querySelectorAll('textarea');
-    data.listing.title = textareas[0]?.value || '';
-    data.listing.bullets = textareas[1]?.value || '';
-    data.listing.searchTerms = textareas[2]?.value || '';
+    if (textareas[0]?.value?.trim()) data.listing.title = textareas[0].value.trim();
+    if (textareas[1]?.value?.trim()) data.listing.bullets = textareas[1].value.trim();
+    if (textareas[2]?.value?.trim()) data.listing.searchTerms = textareas[2].value.trim();
   }
 
-  // Determine submit URL (same origin for n8n hosted, or configurable)
-  const submitUrl = window.COSMO_SUBMIT_URL || (window.location.origin + '/webhook/cosmo-submit');
+  // Collect manual ad table
+  const adTable = document.querySelector('#sec-ad-manual .inline-table');
+  if (adTable) {
+    const channels = ['SP', 'SB', 'SD'];
+    data.manualAd.channels = [];
+    adTable.querySelectorAll('tbody tr').forEach((row, i) => {
+      const cells = row.querySelectorAll('input');
+      data.manualAd.channels.push({
+        channel: channels[i] || '',
+        spend: cells[0]?.value?.trim() || '',
+        sales: cells[1]?.value?.trim() || '',
+        acos: cells[2]?.value?.trim() || '',
+        orders: cells[3]?.value?.trim() || ''
+      });
+    });
+    // 7-day metrics
+    const metricInputs = document.querySelectorAll('#sec-ad-manual .field-grid-4 .field-input');
+    data.manualAd.sales7d = metricInputs[0]?.value?.trim() || '';
+    data.manualAd.sessions7d = metricInputs[1]?.value?.trim() || '';
+    data.manualAd.cvr7d = metricInputs[2]?.value?.trim() || '';
+    data.manualAd.returnRate30d = metricInputs[3]?.value?.trim() || '';
+    // Secondary metrics
+    const metricInputs2 = document.querySelectorAll('#sec-ad-manual .field-grid-3 .field-input');
+    data.manualAd.targetAcos = metricInputs2[0]?.value?.trim() || '';
+    data.manualAd.fbaInventory = metricInputs2[1]?.value?.trim() || '';
+    data.manualAd.daysOfInventory = metricInputs2[2]?.value?.trim() || '';
+  }
 
-  fetch(submitUrl, {
+  // ===== SUBMIT TO N8N =====
+  // Configure your n8n webhook URL here
+  const WEBHOOK_URL = window.COSMO_WEBHOOK_URL || 'https://your-n8n-domain.com/webhook/cosmo-v3-submit';
+  
+  console.log('📦 COSMO V3 Submit Data:', JSON.stringify(data, null, 2));
+
+  fetch(WEBHOOK_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   })
-  .then(res => res.json())
+  .then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  })
   .then(result => {
     btn.innerHTML = '✅ 已提交';
     btn.style.background = 'var(--green)';
-    document.getElementById('submitHint').textContent = '🎉 诊断请求已提交，工作流正在执行...';
-    document.getElementById('submitHint').style.color = 'var(--green)';
+    showToast('🎉 诊断请求已提交，工作流正在执行...', 'success');
+    
+    // Reset after 5s
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = '🚀 启动诊断';
+      btn.style.background = '';
+    }, 5000);
   })
   .catch(err => {
     btn.disabled = false;
     btn.innerHTML = '🚀 启动诊断';
-    alert('提交失败: ' + err.message + '\n\n请检查网络连接或联系管理员。');
+    showToast('提交失败: ' + err.message, 'error');
+    console.error('Submit error:', err);
   });
+}
+
+function showToast(msg, type) {
+  const existing = document.querySelector('.submit-toast');
+  if (existing) existing.remove();
+  
+  const toast = document.createElement('div');
+  toast.className = `submit-toast ${type}`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
 }
 
 // ===== RUFUS Q&A SYSTEM =====
